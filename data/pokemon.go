@@ -1,12 +1,11 @@
 package data
 
 type Pokemon struct {
-	BasePokemon    BasePokemon  `json:"base_pokemon"`
+	BasePokemon
 	Stats          PokemonStats `json:"stats"`
 	Level          int          `json:"level"`
 	ExperienceLeft int          `json:"experience_left"`
 	Moveset        Moveset      `json:"moveset"`
-	PartyOrder     int          `json:"party_order"`
 }
 
 // TODO add level at which pokemon learns
@@ -16,7 +15,7 @@ type BasePokemon struct {
 	BaseExperience      int             `json:"base_experience"`
 	LearnByLevelUpMoves []Moves         `json:"moves"`
 	SpritesURL          string          `json:"sprites"`
-	BaseStats           PokemonStats    `json:"stats"`
+	BaseStats           PokemonStats    `json:"base_stats"`
 	Type1               PokemonTypeName `json:"type1"`
 	Type2               PokemonTypeName `json:"type2,omitempty"`
 }

@@ -8,13 +8,21 @@ import (
 	"github.com/sanchitdeora/PokeSim/data"
 )
 
-type TrainerBattleOpts struct {
-	TrainerLogPrefix string
-}
+type TrainerBattleOpts struct{}
 
 type TrainerBattle struct {
-	UserTrainerInfo  *BattleTrainerInfo
-	EnemyTrainerInfo *BattleTrainerInfo
+	// User
+	User                    *data.User
+	UserActivePokemon       *data.InBattlePokemon
+	UserInBattleParty       []*data.InBattlePokemon
+	UserUnfaintedPartyCount int
+
+	// Trainer
+	Trainer                    *data.Trainer
+	TrainerActivePokemon       *data.InBattlePokemon
+	TrainerInBattleParty       []*data.InBattlePokemon
+	TrainerPokemonFacedExp     map[*data.Pokemon][]*data.InBattlePokemon
+	TrainerUnfaintedPartyCount int
 }
 
 type TrainerBattleImpl struct {
@@ -22,26 +30,68 @@ type TrainerBattleImpl struct {
 	*TrainerBattle
 }
 
-func NewTrainerBattle(enemyTrainer *data.Trainer, user *data.Trainer) BattleIFace {
+func NewTrainerBattle(opts *TrainerBattleOpts, trainer *data.Trainer, user *data.User) BattleIFace {
+	// prepare user
+	var userActivePokemon *data.InBattlePokemon
+	userInBattlePokemonParty := make([]*data.InBattlePokemon, 0, 6)
+
+	for partyIndex, pokemon := range user.Party {
+		if pokemon == nil {
+			continue
+		}
+		inBattlePokemon := data.CreateNewInBattlePokemon(pokemon)
+		if partyIndex == 0 {
+			userActivePokemon = inBattlePokemon
+		} else if len(userInBattlePokemonParty) <= 6 {
+			userInBattlePokemonParty = append(userInBattlePokemonParty, inBattlePokemon)
+		}
+	}
+
+	// create trainer
+	var trainerActivePokemon *data.InBattlePokemon
+	trainerInBattlePokemonParty := make([]*data.InBattlePokemon, 0, 6)
+
+	trainerPokemonFacedExp := make(map[*data.Pokemon][]*data.InBattlePokemon, 0)
+	for partyIndex, pokemon := range trainer.Party {
+		if pokemon == nil {
+			continue
+		}
+		inBattlePokemon := data.CreateNewInBattlePokemon(pokemon)
+		if partyIndex == 0 {
+			trainerActivePokemon = inBattlePokemon
+		} else if len(trainerInBattlePokemonParty) < 5 {
+			trainerInBattlePokemonParty = append(trainerInBattlePokemonParty, inBattlePokemon)
+		}
+		trainerPokemonFacedExp[pokemon] = make([]*data.InBattlePokemon, 0, 6)
+	}
+
 	return &TrainerBattleImpl{
-		TrainerBattleOpts: &TrainerBattleOpts{TrainerLogPrefix: "Trainer"},
+		TrainerBattleOpts: opts,
 		TrainerBattle: &TrainerBattle{
-			UserTrainerInfo:  createTrainerInfo(user, true),
-			EnemyTrainerInfo: createTrainerInfo(enemyTrainer, false),
+			User:                    user,
+			UserActivePokemon:       userActivePokemon,
+			UserInBattleParty:       userInBattlePokemonParty,
+			UserUnfaintedPartyCount: len(userInBattlePokemonParty) + 1, // +1 for active pokemon
+
+			Trainer:                    trainer,
+			TrainerActivePokemon:       trainerActivePokemon,
+			TrainerInBattleParty:       trainerInBattlePokemonParty,
+			TrainerPokemonFacedExp:     trainerPokemonFacedExp,
+			TrainerUnfaintedPartyCount: len(trainerInBattlePokemonParty) + 1, // +1 for active pokemon
 		},
 	}
 }
 
-func (tb *TrainerBattleImpl) InitiateBattleSequence() {
-	slog.Info(fmt.Sprintf("%s, chooses %s!", tb.getTrainerName(false), tb.UserTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name))
-	slog.Info(fmt.Sprintf("%s, I choose you!", tb.UserTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name))
+func (tb *TrainerBattleImpl) InitiateBattleSequence() (*data.BattleReport, error) {
+	slog.Info(fmt.Sprintf("%s chooses %s!", tb.getTrainerName(false), tb.TrainerActivePokemon.Pokemon.Name))
+	slog.Info(fmt.Sprintf("%s, I choose you!\n", tb.getActivePokemonName(true)))
 
 	battleCompleteFlag := false
-	tb.AddUserPokemonFacingEnemyActive(tb.UserTrainerInfo.ActivePokemon.Pokemon)
+	tb.AddToTrainerPokemonFacedExp(tb.UserActivePokemon)
 
 	for {
-		slog.Info(fmt.Sprintf("%s Health: %v", tb.UserTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name, tb.UserTrainerInfo.ActivePokemon.BattleHP))
-		slog.Info(fmt.Sprintf("Enemy %s Health: %v", tb.EnemyTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name, tb.EnemyTrainerInfo.ActivePokemon.BattleHP))
+		slog.Info(fmt.Sprintf("%s Health: %v", tb.getActivePokemonName(true), tb.UserActivePokemon.BattleHP))
+		slog.Info(fmt.Sprintf("%s Health: %v\n", tb.getActivePokemonName(false), tb.TrainerActivePokemon.BattleHP))
 
 		battleInputs := tb.GetPokemonAttackOrder()
 
@@ -56,87 +106,88 @@ func (tb *TrainerBattleImpl) InitiateBattleSequence() {
 			break
 		}
 	}
-	tb.BattleReport()
+	return tb.BattleReport()
 }
 
-func (tb *TrainerBattleImpl) GetPokemonAttackOrder() (inputs []*BattleInput) {
-	userInput := waitForInput(tb.UserTrainerInfo.ActivePokemon, tb.EnemyTrainerInfo.ActivePokemon)
-	enemyInput := waitForInput(tb.EnemyTrainerInfo.ActivePokemon, tb.UserTrainerInfo.ActivePokemon)
+func (tb *TrainerBattleImpl) GetPokemonAttackOrder() (inputs []*data.BattleInput) {
+	userInput := waitForInput(tb.UserActivePokemon, tb.TrainerActivePokemon, true)
+	trainerInput := waitForInput(tb.TrainerActivePokemon, tb.UserActivePokemon, false)
 
 	// if any pokemon's move is higher priority, it will go first. If equal, check speed
-	if userInput.Move.Priority != enemyInput.Move.Priority {
-		if userInput.Move.Priority > enemyInput.Move.Priority {
-			return append(inputs, userInput, enemyInput)
+	if userInput.Move.Priority != trainerInput.Move.Priority {
+		if userInput.Move.Priority > trainerInput.Move.Priority {
+			return append(inputs, userInput, trainerInput)
 		} else {
-			return append(inputs, enemyInput, userInput)
+			return append(inputs, trainerInput, userInput)
 		}
 	}
 
-	// if user's active pokemon speed >= enemy's, then user goes first.
-	if tb.UserTrainerInfo.ActivePokemon.Pokemon.Stats.Speed >= tb.EnemyTrainerInfo.ActivePokemon.Pokemon.Stats.Speed {
-		return append(inputs, userInput, enemyInput)
+	// if user's active pokemon speed >= opposing pokemon's, then user goes first.
+	if tb.UserActivePokemon.Pokemon.Stats.Speed >= tb.TrainerActivePokemon.Pokemon.Stats.Speed {
+		return append(inputs, userInput, trainerInput)
 	} else {
-		return append(inputs, enemyInput, userInput)
+		return append(inputs, trainerInput, userInput)
 	}
 }
 
-func (tb *TrainerBattleImpl) Turn(userInput *BattleInput) {
+func (tb *TrainerBattleImpl) Turn(userInput *data.BattleInput) {
 	switch userInput.Type {
-	case Switch:
-		slog.Info(fmt.Sprintf("%s is switching %s for %s", tb.getTrainerName(userInput.IsUser), userInput.CurrentPokemon.Pokemon.BasePokemon.Name, userInput.Target.Pokemon.BasePokemon.Name))
-		tb.SwitchPokemon(userInput.Target.Pokemon.PartyOrder, userInput.IsUser, true)
+	case data.Switch:
+		slog.Info(fmt.Sprintf("%s is switching %s for %s", tb.getTrainerName(userInput.IsUser), userInput.CurrentPokemon.Pokemon.Name, userInput.Target.Pokemon.Name))
+		tb.SwitchPokemon(userInput.Target.Pokemon, userInput.IsUser)
 
-	case Item:
+	case data.Bag:
 		if userInput.Item != nil && userInput.Item.ItemType == data.MedicalItems {
 			tb.UseItem(userInput.Target, userInput.Item)
 		}
 
-	case Attack:
-		tb.Attack(userInput.CurrentPokemon, userInput.Target, userInput.Move)
+	case data.Attack:
+		tb.Attack(userInput.CurrentPokemon, userInput.Target, userInput.Move, userInput.IsUser)
 
-		if tb.UserTrainerInfo.ActivePokemon.IsFainted {
-			slog.Info(fmt.Sprintf("%s has fainted!", tb.UserTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name))
-			tb.UserTrainerInfo.UnfaintedPartyCount -= 1
+		if tb.UserActivePokemon.IsFainted {
+			slog.Info(fmt.Sprintf("%s has fainted!", tb.getActivePokemonName(true)))
+			tb.UserUnfaintedPartyCount -= 1
 
-			if tb.UserTrainerInfo.UnfaintedPartyCount > 0 {
+			if tb.UserUnfaintedPartyCount > 0 {
 				// switch active pokemon with first in party and push fainted pokemon at end
-				nextPokemonIndex := 0
-				for i, pokemon := range tb.EnemyTrainerInfo.InBattleParty {
+				nextUnfaintedPokemonIndex := 0
+				for i, pokemon := range tb.TrainerInBattleParty {
 					if !pokemon.IsFainted {
-						nextPokemonIndex = i
+						nextUnfaintedPokemonIndex = i
 						break
 					}
 				}
-				tb.SwitchPokemon(nextPokemonIndex, true, true)
+				tb.SwitchPokemonWithIndex(nextUnfaintedPokemonIndex, true)
 			}
 		}
 
-		if tb.EnemyTrainerInfo.ActivePokemon.IsFainted {
-			slog.Info(fmt.Sprintf("Enemy %s has fainted!", tb.EnemyTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name))
-			tb.EnemyTrainerInfo.UnfaintedPartyCount -= 1
+		if tb.TrainerActivePokemon.IsFainted {
+			slog.Info(fmt.Sprintf("%s has fainted!", tb.getActivePokemonName(false)))
+			tb.TrainerUnfaintedPartyCount -= 1
 
-			BattleExperienceGain(tb.EnemyTrainerInfo.ActivePokemon.Pokemon, tb.EnemyTrainerInfo.EnemyPokemonFaced[tb.EnemyTrainerInfo.ActivePokemon.Pokemon])
+			battleExperienceGain(tb.TrainerActivePokemon.Pokemon, tb.TrainerPokemonFacedExp[tb.TrainerActivePokemon.Pokemon])
 
-			if tb.EnemyTrainerInfo.UnfaintedPartyCount > 0 {
+			if tb.TrainerUnfaintedPartyCount > 0 {
 				// switch active pokemon with first in party and push fainted pokemon at end
-				nextPokemonIndex := 0
-				for i, pokemon := range tb.EnemyTrainerInfo.InBattleParty {
+				nextUnfaintedPokemonIndex := 0
+				for i, pokemon := range tb.TrainerInBattleParty {
 					if !pokemon.IsFainted {
-						nextPokemonIndex = i
+						nextUnfaintedPokemonIndex = i
 						break
 					}
 				}
-				tb.SwitchPokemon(nextPokemonIndex, false, true)
+				tb.SwitchPokemonWithIndex(nextUnfaintedPokemonIndex, false)
 			}
 		}
 
-	case Run:
+	// TODO: turn should not be counted
+	case data.Run:
 		tb.Run()
 	}
 }
 
-func (tb *TrainerBattleImpl) Attack(attackPokemon *InBattlePokemon, targetPokemon *InBattlePokemon, attackMove *data.Moves) {
-	slog.Info(fmt.Sprintf("%s used %s", attackPokemon.Pokemon.BasePokemon.Name, attackMove.Name))
+func (tb *TrainerBattleImpl) Attack(attackPokemon *data.InBattlePokemon, targetPokemon *data.InBattlePokemon, attackMove *data.Moves, isUser bool) {
+	slog.Info(fmt.Sprintf("%s used %s", tb.getActivePokemonName(isUser), attackMove.Name))
 
 	damagePoints := calculateAttackDamage(attackPokemon, targetPokemon, attackMove, 1.0)
 
@@ -147,32 +198,62 @@ func (tb *TrainerBattleImpl) Attack(attackPokemon *InBattlePokemon, targetPokemo
 		targetPokemon.BattleHP -= damagePoints
 	}
 
-	slog.Info(fmt.Sprintf("%s did %v points of damage to %s", attackPokemon.Pokemon.BasePokemon.Name, damagePoints, targetPokemon.Pokemon.BasePokemon.Name))
+	slog.Info(fmt.Sprintf("%s did %v points of damage to %s", tb.getActivePokemonName(isUser), damagePoints, tb.getActivePokemonName(!isUser)))
 	fmt.Println()
 }
 
-func (tb *TrainerBattleImpl) SwitchPokemon(switchPokemonIndex int, isUser bool, enabled bool) {
+func (tb *TrainerBattleImpl) SwitchPokemon(switchingPokemon *data.Pokemon, isUser bool) {
+	var inBattleParty []*data.InBattlePokemon
 	if isUser {
-		switchPokemon := tb.UserTrainerInfo.ActivePokemon
-		tb.UserTrainerInfo.ActivePokemon = tb.UserTrainerInfo.InBattleParty[switchPokemonIndex]
-		tb.UserTrainerInfo.InBattleParty = append(tb.UserTrainerInfo.InBattleParty[:switchPokemonIndex], tb.UserTrainerInfo.InBattleParty[switchPokemonIndex+1:]...)
-		tb.UserTrainerInfo.InBattleParty = append(tb.UserTrainerInfo.InBattleParty, switchPokemon)
-
-		slog.Info(fmt.Sprintf("%s, I choose you!", tb.UserTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name))
+		inBattleParty = tb.UserInBattleParty
 	} else {
-		switchPokemon := tb.EnemyTrainerInfo.ActivePokemon
-		tb.EnemyTrainerInfo.ActivePokemon = tb.EnemyTrainerInfo.InBattleParty[switchPokemonIndex]
-		tb.EnemyTrainerInfo.InBattleParty = append(tb.EnemyTrainerInfo.InBattleParty[:switchPokemonIndex], tb.EnemyTrainerInfo.InBattleParty[switchPokemonIndex+1:]...)
-		tb.EnemyTrainerInfo.InBattleParty = append(tb.EnemyTrainerInfo.InBattleParty, switchPokemon)
+		inBattleParty = tb.TrainerInBattleParty
+	}
 
-		slog.Info(fmt.Sprintf("%s, chooses %s!", tb.getTrainerName(false), tb.UserTrainerInfo.ActivePokemon.Pokemon.BasePokemon.Name))
+	for i, pokemon := range inBattleParty {
+		if pokemon.Pokemon == switchingPokemon {
+			tb.SwitchPokemonWithIndex(i, isUser)
+		}
+	}
+}
+
+func (tb *TrainerBattleImpl) SwitchPokemonWithIndex(switchingPokemonIndex int, isUser bool) {
+	slog.Info(fmt.Sprintf("%s is switching their pokemon!", tb.getTrainerName(isUser)))
+	if isUser {
+		currentPokemon := tb.UserActivePokemon
+		nextPokemon := tb.UserInBattleParty[switchingPokemonIndex]
+		tb.UserActivePokemon = nil
+
+		// only get active pokemon if unfainted pokemon available; else add to the list
+		if !nextPokemon.IsFainted {
+			tb.UserActivePokemon = tb.UserInBattleParty[switchingPokemonIndex]
+			tb.UserInBattleParty = append(tb.UserInBattleParty[:switchingPokemonIndex], tb.UserInBattleParty[switchingPokemonIndex+1:]...)
+		}
+		tb.UserInBattleParty = append(tb.UserInBattleParty, currentPokemon)
+
+		slog.Info(fmt.Sprintf("%s, I choose you!", tb.getActivePokemonName(true)))
+
+	} else {
+		currentPokemon := tb.TrainerActivePokemon
+		nextPokemon := tb.TrainerInBattleParty[switchingPokemonIndex]
+		tb.TrainerActivePokemon = nil
+
+		// only get active pokemon if unfainted pokemon available; else add to the list
+		if !nextPokemon.IsFainted {
+			tb.TrainerActivePokemon = tb.TrainerInBattleParty[switchingPokemonIndex]
+			tb.TrainerInBattleParty = append(tb.TrainerInBattleParty[:switchingPokemonIndex], tb.TrainerInBattleParty[switchingPokemonIndex+1:]...)
+		}
+		tb.TrainerInBattleParty = append(tb.TrainerInBattleParty, currentPokemon)
+
+		slog.Info(fmt.Sprintf("%s, chooses %s!", tb.getTrainerName(false), tb.TrainerActivePokemon.Pokemon.Name))
+
 	}
 
 	// update map of pokemon facing
-	tb.AddUserPokemonFacingEnemyActive(tb.UserTrainerInfo.ActivePokemon.Pokemon)
+	tb.AddToTrainerPokemonFacedExp(tb.UserActivePokemon)
 }
 
-func (tb *TrainerBattleImpl) UseItem(targetPokemon *InBattlePokemon, item *data.Item) {
+func (tb *TrainerBattleImpl) UseItem(targetPokemon *data.InBattlePokemon, item *data.Item) {
 	switch item.ItemType {
 	case data.MedicalItems:
 		tb.HealPokemon(targetPokemon, item)
@@ -181,7 +262,7 @@ func (tb *TrainerBattleImpl) UseItem(targetPokemon *InBattlePokemon, item *data.
 	}
 }
 
-func (tb *TrainerBattleImpl) HealPokemon(targetPokemon *InBattlePokemon, item *data.Item) {
+func (tb *TrainerBattleImpl) HealPokemon(targetPokemon *data.InBattlePokemon, item *data.Item) {
 	targetPokemon.BattleHP += targetPokemon.BattleHP + item.Attributes
 
 	if targetPokemon.BattleHP > targetPokemon.Pokemon.Stats.HP {
@@ -189,7 +270,8 @@ func (tb *TrainerBattleImpl) HealPokemon(targetPokemon *InBattlePokemon, item *d
 	}
 }
 
-func (tb *TrainerBattleImpl) CatchPokemon(targetPokemon *InBattlePokemon, item *data.Item) {
+// TODO: turn should not be counted
+func (tb *TrainerBattleImpl) CatchPokemon(targetPokemon *data.InBattlePokemon, item *data.Item) {
 	slog.Info("Cannot catch a pokemon in trainer battle")
 }
 
@@ -198,41 +280,58 @@ func (tb *TrainerBattleImpl) Run() {
 }
 
 func (tb *TrainerBattleImpl) IsBattleOver() bool {
-	if tb.UserTrainerInfo.UnfaintedPartyCount == 0 || tb.EnemyTrainerInfo.UnfaintedPartyCount == 0 {
+	if tb.UserUnfaintedPartyCount == 0 || tb.TrainerUnfaintedPartyCount == 0 {
 		return true
 	}
 	return false
 }
 
-func (tb *TrainerBattleImpl) BattleReport() (*BattleResult, error) {
+func (tb *TrainerBattleImpl) BattleReport() (*data.BattleReport, error) {
 	if !tb.IsBattleOver() {
 		return nil, errors.New("battle is ongoing")
 	}
 
-	var result BattleResult
-	if tb.UserTrainerInfo.UnfaintedPartyCount == 0 {
-		slog.Info(fmt.Sprintf("Trainer %s has won the battle", tb.EnemyTrainerInfo.Trainer.Name))
+	var result data.BattleReport
+	if tb.UserUnfaintedPartyCount == 0 {
+		result.PrizeMoney = data.GetMoneyLost(tb.User)
+
+		slog.Info(fmt.Sprintf("You lost $%v!", result.PrizeMoney))
+		slog.Info(fmt.Sprintf("You lost the battle to %s!", tb.Trainer.Name))
 		result.UserWin = false
 	} else {
-		slog.Info(fmt.Sprintf("%s has won the battle!", tb.UserTrainerInfo.Trainer.Name))
-		slog.Info(fmt.Sprintf("You got $%v!", tb.EnemyTrainerInfo.Trainer.AdditionalInfo.PrizeMoney))
-
 		result.UserWin = true
-		result.PrizeMoney = tb.EnemyTrainerInfo.Trainer.AdditionalInfo.PrizeMoney
+		result.PrizeMoney = data.GetPrizeMoney(tb.Trainer)
+
+		slog.Info(fmt.Sprintf("%s has won the battle!", tb.User.Name))
+		slog.Info(fmt.Sprintf("You got $%v!", result.PrizeMoney))
+
+		// if gym battle; earn badge
+		if tb.Trainer.Type == data.GymLeaderPrefix {
+			result.BadgesEarned = &tb.Trainer.Rewards.Badge
+			slog.Info(fmt.Sprintf("You earned a $%v!", tb.Trainer.Rewards.Badge.Name))
+		}
 	}
 
 	return &result, nil
 }
 
-func (tb *TrainerBattleImpl) AddUserPokemonFacingEnemyActive(pokemon *data.Pokemon) {
-	tb.EnemyTrainerInfo.EnemyPokemonFaced[tb.EnemyTrainerInfo.ActivePokemon.Pokemon] =
-		append(tb.EnemyTrainerInfo.EnemyPokemonFaced[tb.EnemyTrainerInfo.ActivePokemon.Pokemon], pokemon)
+func (tb *TrainerBattleImpl) AddToTrainerPokemonFacedExp(pokemon *data.InBattlePokemon) {
+	tb.TrainerPokemonFacedExp[tb.TrainerActivePokemon.Pokemon] =
+		append(tb.TrainerPokemonFacedExp[tb.TrainerActivePokemon.Pokemon], pokemon)
 }
 
 func (tb *TrainerBattleImpl) getTrainerName(isUser bool) string {
 	if isUser {
-		return tb.UserTrainerInfo.Trainer.Name
+		return tb.User.Name
 	} else {
-		return tb.TrainerLogPrefix + tb.UserTrainerInfo.Trainer.Name
+		return fmt.Sprintf("%s %s", tb.Trainer.Type, tb.Trainer.Name)
+	}
+}
+
+func (tb *TrainerBattleImpl) getActivePokemonName(isUser bool) string {
+	if isUser {
+		return tb.UserActivePokemon.Pokemon.Name
+	} else {
+		return fmt.Sprintf("%s %s", "the opposing", tb.TrainerActivePokemon.Pokemon.Name)
 	}
 }

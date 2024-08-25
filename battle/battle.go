@@ -11,98 +11,26 @@ import (
 )
 
 type BattleIFace interface {
-	InitiateBattleSequence()
-	Attack(attackPokemon *InBattlePokemon, targetPokemon *InBattlePokemon, attackMove *data.Moves)
-	CatchPokemon(targetPokemon *InBattlePokemon, item *data.Item)
+	InitiateBattleSequence() (*data.BattleReport, error)
+	Attack(attackPokemon *data.InBattlePokemon, targetPokemon *data.InBattlePokemon, attackMove *data.Moves, isUser bool)
+	CatchPokemon(targetPokemon *data.InBattlePokemon, item *data.Item)
 	Run()
 	IsBattleOver() bool
-	BattleReport() (*BattleResult, error)
+	BattleReport() (*data.BattleReport, error)
 }
 
-type InBattlePokemon struct {
-	Pokemon   *data.Pokemon
-	BattleHP  int
-	IsFainted bool
-}
-
-type BattleTrainerInfo struct {
-	Trainer             *data.Trainer
-	ActivePokemon       *InBattlePokemon
-	InBattleParty       []*InBattlePokemon
-	EnemyPokemonFaced   map[*data.Pokemon][]*data.Pokemon
-	UnfaintedPartyCount int
-	IsUser              bool
-}
-
-type BattleResult struct {
-	UserWin    bool
-	PrizeMoney int
-	BonusItems []*data.Item
-}
-
-type BattleOpts struct {
-	Type string `json:"type"`
-}
-
-type BattleInput struct {
-	Type           BattleInputType
-	CurrentPokemon *InBattlePokemon
-	Target         *InBattlePokemon
-	Move           *data.Moves
-	Item           *data.Item
-	IsUser         bool
-}
-
-type BattleInputType string
-
-const (
-	Attack BattleInputType = "attack"
-	Switch BattleInputType = "switch"
-	Item   BattleInputType = "item"
-	Run    BattleInputType = "run"
-)
-
-func getUserTrainerInfo() *data.Trainer {
-	return nil
-}
-
-func createTrainerInfo(trainer *data.Trainer, isUser bool) *BattleTrainerInfo {
-	var activePokemon InBattlePokemon
-	inBattlePokemonParty := make([]*InBattlePokemon, 0)
-	enemyPokemonFaced := make(map[*data.Pokemon][]*data.Pokemon, 0)
-
-	if !isUser {
-		for _, party := range trainer.Party {
-			enemyPokemonFaced[party] = make([]*data.Pokemon, 0)
-		}
-	} else {
-		enemyPokemonFaced = nil
-	}
-
-	for _, pokemon := range trainer.Party {
-		if pokemon.PartyOrder == 1 {
-			activePokemon.Pokemon = pokemon
-			activePokemon.BattleHP = pokemon.Stats.HP
-			activePokemon.IsFainted = false
-		} else if len(inBattlePokemonParty) < 5 {
-			inBattlePokemonParty = append(inBattlePokemonParty, &InBattlePokemon{
-				Pokemon:   pokemon,
-				BattleHP:  pokemon.Stats.HP,
-				IsFainted: false,
-			})
-		}
-	}
-	return &BattleTrainerInfo{
-		Trainer:             trainer,
-		ActivePokemon:       &activePokemon,
-		InBattleParty:       inBattlePokemonParty,
-		UnfaintedPartyCount: len(trainer.Party),
-		EnemyPokemonFaced:   enemyPokemonFaced,
-		IsUser:              isUser,
+func waitForInput(pokemon *data.InBattlePokemon, target *data.InBattlePokemon, isUser bool) *data.BattleInput {
+	time.Sleep(time.Second * 0)
+	return &data.BattleInput{
+		Type:           data.Attack,
+		Move:           randomMove(&pokemon.Pokemon.Moveset),
+		CurrentPokemon: pokemon,
+		Target:         target,
+		IsUser:         isUser,
 	}
 }
 
-func calculateAttackDamage(attackPokemon *InBattlePokemon, targetPokemon *InBattlePokemon, attackMove *data.Moves, battleTypeAttackCoeff float32) int {
+func calculateAttackDamage(attackPokemon *data.InBattlePokemon, targetPokemon *data.InBattlePokemon, attackMove *data.Moves, battleTypeAttackCoeff float32) int {
 	var totalDamage float32
 
 	var attackStat float32 = 0
@@ -162,33 +90,6 @@ func calculateAttackDamage(attackPokemon *InBattlePokemon, targetPokemon *InBatt
 	return int(math.Round(float64(totalDamage * float32(moveEffect))))
 }
 
-func isCritHit() bool {
-	return randomGenerator(0, 1) < (1.0 / 24.0)
-}
-
-func attackCoefficient() float32 {
-	return randomGenerator(0.85, 1)
-}
-
-func isStab(attackMove *data.Moves, attackPokemon *InBattlePokemon) bool {
-	return attackMove.Type == attackPokemon.Pokemon.BasePokemon.Type1 || attackMove.Type == attackPokemon.Pokemon.BasePokemon.Type2
-}
-
-func randomGenerator(min float32, max float32) float32 {
-	randIndex := rand.Float32()
-	return (min + randIndex*(max-min))
-}
-
-func waitForInput(pokemon *InBattlePokemon, target *InBattlePokemon) *BattleInput {
-	time.Sleep(time.Second * 0)
-	return &BattleInput{
-		Type:           Attack,
-		Move:           randomMove(&pokemon.Pokemon.Moveset),
-		CurrentPokemon: pokemon,
-		Target:         target,
-	}
-}
-
 // generate random move
 func randomMove(moveset *data.Moveset) *data.Moves {
 	moves := []*data.Moves{}
@@ -213,10 +114,12 @@ func randomMove(moveset *data.Moveset) *data.Moves {
 	return moves[int(input)]
 }
 
-func BattleExperienceGain(faintedPokemon *data.Pokemon, pokemonFaced []*data.Pokemon) {
-	for _, pokemon := range pokemonFaced {
-		expGain := calculateExperienceGained(faintedPokemon.Level, faintedPokemon.BasePokemon.BaseExperience, pokemon.Level)
-		slog.Info(fmt.Sprintf("%s gained %v experience points", pokemon.BasePokemon.Name, expGain))
+func battleExperienceGain(faintedPokemon *data.Pokemon, pokemonFaced []*data.InBattlePokemon) {
+	for _, inBattlePokemon := range pokemonFaced {
+		if !inBattlePokemon.IsFainted {
+			expGain := calculateExperienceGained(faintedPokemon.Level, faintedPokemon.BasePokemon.BaseExperience, inBattlePokemon.Pokemon.Level)
+			slog.Info(fmt.Sprintf("%s gained %v experience points", inBattlePokemon.Pokemon.Name, expGain))
+		}
 
 		// TODO: create logic
 		// updatePokemonExperience(expGain, pokemon)
@@ -232,4 +135,21 @@ func calculateExperienceGained(faintedPokemonLevel int, faintedPokemonBaseExp in
 	// TODO: determine if userPokemonLevel is on/past the next evolution level. If, yes -> x1.2
 
 	return int(math.Round(float64(totalExp)))
+}
+
+func isCritHit() bool {
+	return randomGenerator(0, 1) < (1.0 / 24.0)
+}
+
+func attackCoefficient() float32 {
+	return randomGenerator(0.85, 1)
+}
+
+func isStab(attackMove *data.Moves, attackPokemon *data.InBattlePokemon) bool {
+	return attackMove.Type == attackPokemon.Pokemon.BasePokemon.Type1 || attackMove.Type == attackPokemon.Pokemon.BasePokemon.Type2
+}
+
+func randomGenerator(min float32, max float32) float32 {
+	randIndex := rand.Float32()
+	return (min + randIndex*(max-min))
 }

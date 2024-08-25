@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/sanchitdeora/PokeSim/data"
 	"github.com/sanchitdeora/PokeSim/battle"
+	"github.com/sanchitdeora/PokeSim/data"
 	"github.com/sanchitdeora/PokeSim/utils"
 )
 
@@ -18,19 +18,22 @@ func main() {
 	bulbasaur, err := utils.ReadJsonFromFile[*data.Pokemon]("C:\\Projects\\Go-projects\\src\\PokéSim\\testfiles\\transformed_bulbasaurPokemon.json")
 	fmt.Println(bulbasaur, err)
 
-	trainerBattle := battle.NewTrainerBattle(&data.Trainer{
-		Name: "Bash kechtup",
-		Type: data.NormalTrainer,
-		Party: []*data.Pokemon{bulbasaur},
-		AdditionalInfo: &data.AdditionalInfo{
-			PrizeMoney: 100,
+	trainerBattle := battle.NewTrainerBattle(nil,
+		&data.Trainer{
+			BaseTrainer: data.BaseTrainer{
+				Name:  "Bash kechtup",
+				Party: [6]*data.Pokemon{bulbasaur},
+			},
+			Type:    data.TrainerPrefix,
+			Rewards: &data.Rewards{},
 		},
-	},
-	&data.Trainer{
-		Name: "John Cena",
-		Type: data.NormalTrainer,
-		Party: []*data.Pokemon{squirtle},
-	})
+		&data.User{
+			BaseTrainer: data.BaseTrainer{
+				Name:  "John Cena",
+				Party: [6]*data.Pokemon{squirtle},
+			},
+		},
+	)
 
 	trainerBattle.InitiateBattleSequence()
 }
