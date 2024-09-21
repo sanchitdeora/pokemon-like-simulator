@@ -1,0 +1,159 @@
+{
+    "name": "John Cena",
+    "party": [
+        {
+            "base_pokemon_url": "C:\\Projects\\Go-projects\\src\\PokéSim\\testfiles\\transformed_bulbasaurPokemon.json",
+            "stats": {
+                "hp": 144,
+                "attack": 123,
+                "defense": 163,
+                "special_attack": 150,
+                "special_defense": 164,
+                "speed": 143
+            },
+            "level": 75,
+            "experience_left": 1000,
+            "moveset": {
+                "move1": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "fire-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 0,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "fire"
+                },
+                "move2": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "ice-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 0,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "ice"
+                },
+                "move3": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "thunder-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 0,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "electric"
+                },
+                "move4": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "mach-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 1,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "fighting"
+                }
+            }
+        },
+        {
+            "base_pokemon_url": "C:\\Projects\\Go-projects\\src\\PokéSim\\testfiles\\transformed_squirtlePokemon.json",
+            "stats": {
+                "hp": 144,
+                "attack": 123,
+                "defense": 165,
+                "special_attack": 150,
+                "special_defense": 164,
+                "speed": 145
+            },
+            "level": 75,
+            "experience_left": 1000,
+            "moveset": {
+                "move1": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "fire-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 0,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "fire"
+                },
+                "move2": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "ice-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 0,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "ice"
+                },
+                "move3": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "thunder-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 0,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "electric"
+                },
+                "move4": {
+                    "accuracy": 100,
+                    "damage_class": "physical",
+                    "id": 7,
+                    "name": "mach-punch",
+                    "power": 75,
+                    "pp": 15,
+                    "priority": 1,
+                    "stat_changes": [],
+                    "target": {
+                        "name": "selected-pokemon",
+                        "url": "https://pokeapi.co/api/v2/move-target/10/"
+                    },
+                    "type": "fighting"
+                }
+            }
+        }
+    ],
+    "bag": [
+        {}
+    ],
+    "stats": {}
+}

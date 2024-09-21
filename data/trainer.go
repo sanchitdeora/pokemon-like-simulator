@@ -1,5 +1,23 @@
 package data
 
+// save models
+type BaseTrainerSave struct {
+	Name  string           `json:"name"`
+	Party [6]*PokemonSave `json:"party"`
+	Bag   []*Item          `json:"bag"`
+}
+
+type UserSave struct {
+	BaseTrainerSave
+	Stats *TrainerStats `json:"stats"`
+}
+
+type TrainerSave struct {
+	BaseTrainerSave
+	Type    TrainerClass
+	Rewards *Rewards
+}
+
 type User struct {
 	BaseTrainer
 	Stats *TrainerStats
@@ -22,11 +40,6 @@ type Rewards struct {
 	Badge BadgeType `json:"badge_type,omitempty"`
 }
 
-type BadgeType struct {
-	Name   string `json:"name"`
-	Region string `json:"region"`
-}
-
 type TrainerClass string
 
 const (
@@ -37,27 +50,12 @@ const (
 
 type TrainerStats struct {
 	Badges  []BadgeType `json:"badges,omitempty"`
-	Fights  int         `json:"fights"`
+	Battles  int         `json:"fights"`
 	Wins    int         `json:"wins"`
 	Catches int         `json:"catches"`
 	Losses  int         `json:"losses"`
 	PokeDEX int         `json:"pokedex"`
 }
-
-type Item struct {
-	Count       int          `json:"count"`
-	ItemType    ItemCategory `json:"item_category"`
-	Cost        int          `json:"cost"`
-	Attributes  int          `json:"attributes"`
-	Description string       `json:"description"`
-}
-
-type ItemCategory string
-
-const (
-	MedicalItems ItemCategory = "MedicalItems"
-	PokeBalls    ItemCategory = "PokeBalls"
-)
 
 var BasePayoutTable map[TrainerClass]int = map[TrainerClass]int{
 	TrainerPrefix:    80,
@@ -86,7 +84,7 @@ func GetMoneyLost(user *User) int {
 	if user.Stats != nil && user.Stats.Badges != nil {
 		numBadges = len(user.Stats.Badges)
 	}
-	
+
 	highestLevel := 0
 	for _, pokemon := range user.Party {
 		if pokemon == nil {
@@ -97,4 +95,62 @@ func GetMoneyLost(user *User) int {
 		}
 	}
 	return BlackOutPayoutTable[numBadges] * highestLevel
+}
+
+func (t *TrainerSave) ToTrainer() *Trainer {
+	var party [6]*Pokemon
+	for i, pokemon := range t.Party {
+		if pokemon == nil {
+			break
+		}
+		party[i] = pokemon.ToPokemon()
+	}
+	
+	return &Trainer{
+		BaseTrainer: BaseTrainer{
+			Name: t.Name,
+			Party: party,
+			Bag: t.Bag,
+		},
+		Type: t.Type,
+		Rewards: t.Rewards,
+	}
+}
+
+func (u *UserSave) ToUser() *User {
+	var party [6]*Pokemon
+	for i, pokemon := range u.Party {
+		if pokemon == nil {
+			break
+		}
+		party[i] = pokemon.ToPokemon()
+	}
+	
+	return &User{
+		BaseTrainer: BaseTrainer{
+			Name: u.Name,
+			Party: party,
+			Bag: u.Bag,
+		},
+		Stats: u.Stats,
+	}
+}
+
+func (u *User) ToUserSave() *UserSave {
+	var party [6]*PokemonSave
+	for i, pokemon := range u.Party {
+		if pokemon == nil {
+			break
+		}
+		party[i] = pokemon.ToPokemonSave()
+	}
+	
+	return &UserSave{
+		BaseTrainerSave: BaseTrainerSave{
+			Name: u.Name,
+			Party: party,
+			Bag: u.Bag,
+		},
+		Stats: u.Stats,
+	}
 }

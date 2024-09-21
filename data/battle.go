@@ -7,10 +7,10 @@ type InBattlePokemon struct {
 }
 
 type BattleReport struct {
-	UserWin      bool
-	PrizeMoney   int
-	BonusItems   []*Item
-	BadgesEarned *BadgeType
+	UserWin     bool
+	Money       int
+	BonusItems  []*Item
+	BadgeEarned *BadgeType
 }
 
 type BattleOpts struct {

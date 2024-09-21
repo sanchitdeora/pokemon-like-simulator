@@ -1,19 +1,29 @@
 package data
 
-type Pokemon struct {
-	BasePokemon
+import "github.com/sanchitdeora/PokeSim/utils"
+
+type PokemonSave struct {
+	BasePokemonURL string       `json:"base_pokemon_url"`
 	Stats          PokemonStats `json:"stats"`
 	Level          int          `json:"level"`
 	ExperienceLeft int          `json:"experience_left"`
 	Moveset        Moveset      `json:"moveset"`
 }
 
-// TODO add level at which pokemon learns
+type Pokemon struct {
+	BasePokemon
+	BasePokemonURL string       `json:"base_pokemon_url"`
+	Stats          PokemonStats `json:"stats"`
+	Level          int          `json:"level"`
+	ExperienceLeft int          `json:"experience_left"`
+	Moveset        Moveset      `json:"moveset"`
+}
+
 type BasePokemon struct {
 	ID                  int             `json:"id"`
 	Name                string          `json:"name"`
 	BaseExperience      int             `json:"base_experience"`
-	LearnByLevelUpMoves []Moves         `json:"moves"`
+	MovesLearnedByLevel map[int]Moves   `json:"moves_learned_by_level"`
 	SpritesURL          string          `json:"sprites"`
 	BaseStats           PokemonStats    `json:"base_stats"`
 	Type1               PokemonTypeName `json:"type1"`
@@ -53,3 +63,25 @@ const (
 	Status   MoveDamageClass = "status"
 	Special  MoveDamageClass = "special"
 )
+
+func (s *PokemonSave) ToPokemon() *Pokemon {
+	basePokemon, _ := utils.ReadJsonFromFile[BasePokemon](s.BasePokemonURL)
+	return &Pokemon{
+		BasePokemon:    basePokemon,
+		BasePokemonURL: s.BasePokemonURL,
+		Stats:          s.Stats,
+		Level:          s.Level,
+		ExperienceLeft: s.ExperienceLeft,
+		Moveset:        s.Moveset,
+	}
+}
+
+func (p *Pokemon) ToPokemonSave() *PokemonSave {
+	return &PokemonSave{
+		BasePokemonURL: p.BasePokemonURL,
+		Stats:          p.Stats,
+		Level:          p.Level,
+		ExperienceLeft: p.ExperienceLeft,
+		Moveset:        p.Moveset,
+	}
+}

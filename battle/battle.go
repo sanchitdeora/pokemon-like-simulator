@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"math/rand"
-	"time"
 
 	"github.com/sanchitdeora/PokeSim/data"
 )
@@ -19,14 +17,47 @@ type BattleIFace interface {
 	BattleReport() (*data.BattleReport, error)
 }
 
-func waitForInput(pokemon *data.InBattlePokemon, target *data.InBattlePokemon, isUser bool) *data.BattleInput {
-	time.Sleep(time.Second * 0)
-	return &data.BattleInput{
-		Type:           data.Attack,
-		Move:           randomMove(&pokemon.Pokemon.Moveset),
-		CurrentPokemon: pokemon,
-		Target:         target,
-		IsUser:         isUser,
+func getPokemonAttackOrder(userActivePokemon *data.InBattlePokemon, trainerActivePokemon *data.InBattlePokemon) (inputs []*data.BattleInput) {
+	// func (tb *TrainerBattleImpl) GetPokemonAttackOrder() (inputs []*data.BattleInput) {
+	userInput := waitForInput(userActivePokemon, trainerActivePokemon, true)
+	trainerInput := waitForInput(trainerActivePokemon, userActivePokemon, false)
+
+	// if any pokemon's move is higher priority, it will go first. If equal, check speed
+	if userInput.Move.Priority != trainerInput.Move.Priority {
+		if userInput.Move.Priority > trainerInput.Move.Priority {
+			return append(inputs, userInput, trainerInput)
+		} else {
+			return append(inputs, trainerInput, userInput)
+		}
+	}
+
+	// if user's active pokemon speed >= opposing pokemon's, then user goes first.
+	if userActivePokemon.Pokemon.Stats.Speed >= trainerActivePokemon.Pokemon.Stats.Speed {
+		return append(inputs, userInput, trainerInput)
+	} else {
+		return append(inputs, trainerInput, userInput)
+	}
+}
+
+func switchPokemonWithIndex(switchingPokemonIndex int, activePokemon *data.InBattlePokemon, inBattleParty *[]*data.InBattlePokemon) *data.InBattlePokemon {
+	currentPokemon := activePokemon
+	nextPokemon := (*inBattleParty)[switchingPokemonIndex]
+	// tb.UserActivePokemon = nil
+
+	// only get active pokemon if unfainted pokemon available; else add to the list
+	if !nextPokemon.IsFainted {
+		(*inBattleParty) = append((*inBattleParty)[:switchingPokemonIndex], (*inBattleParty)[switchingPokemonIndex+1:]...)
+	}
+	(*inBattleParty) = append((*inBattleParty), currentPokemon)
+
+	return nextPokemon
+}
+
+func healPokemon(targetPokemon *data.InBattlePokemon, item *data.Item) {
+	targetPokemon.BattleHP += targetPokemon.BattleHP + item.Attributes
+
+	if targetPokemon.BattleHP > targetPokemon.Pokemon.Stats.HP {
+		targetPokemon.BattleHP = targetPokemon.Pokemon.Stats.HP
 	}
 }
 
@@ -90,30 +121,6 @@ func calculateAttackDamage(attackPokemon *data.InBattlePokemon, targetPokemon *d
 	return int(math.Round(float64(totalDamage * float32(moveEffect))))
 }
 
-// generate random move
-func randomMove(moveset *data.Moveset) *data.Moves {
-	moves := []*data.Moves{}
-	if moveset.Move1 != nil {
-		moves = append(moves, moveset.Move1)
-	}
-	if moveset.Move2 != nil {
-		moves = append(moves, moveset.Move2)
-	}
-	if moveset.Move3 != nil {
-		moves = append(moves, moveset.Move3)
-	}
-	if moveset.Move4 != nil {
-		moves = append(moves, moveset.Move4)
-	}
-
-	if len(moves) == 0 {
-		return nil
-	}
-
-	input := randomGenerator(0, float32(len(moves)))
-	return moves[int(input)]
-}
-
 func battleExperienceGain(faintedPokemon *data.Pokemon, pokemonFaced []*data.InBattlePokemon) {
 	for _, inBattlePokemon := range pokemonFaced {
 		if !inBattlePokemon.IsFainted {
@@ -124,32 +131,4 @@ func battleExperienceGain(faintedPokemon *data.Pokemon, pokemonFaced []*data.InB
 		// TODO: create logic
 		// updatePokemonExperience(expGain, pokemon)
 	}
-}
-
-// calculate experience gained
-func calculateExperienceGained(faintedPokemonLevel int, faintedPokemonBaseExp int, userPokemonLevel int) int {
-	var totalExp float32
-	totalExp = float32(faintedPokemonBaseExp*faintedPokemonLevel) / 5.0
-	totalExp *= float32(math.Pow((float64((2*faintedPokemonLevel)+10)/float64(faintedPokemonLevel+userPokemonLevel+10)), 2.5)) + 1.0
-
-	// TODO: determine if userPokemonLevel is on/past the next evolution level. If, yes -> x1.2
-
-	return int(math.Round(float64(totalExp)))
-}
-
-func isCritHit() bool {
-	return randomGenerator(0, 1) < (1.0 / 24.0)
-}
-
-func attackCoefficient() float32 {
-	return randomGenerator(0.85, 1)
-}
-
-func isStab(attackMove *data.Moves, attackPokemon *data.InBattlePokemon) bool {
-	return attackMove.Type == attackPokemon.Pokemon.BasePokemon.Type1 || attackMove.Type == attackPokemon.Pokemon.BasePokemon.Type2
-}
-
-func randomGenerator(min float32, max float32) float32 {
-	randIndex := rand.Float32()
-	return (min + randIndex*(max-min))
 }
