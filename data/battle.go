@@ -4,6 +4,7 @@ type InBattlePokemon struct {
 	Pokemon   *Pokemon
 	BattleHP  int
 	IsFainted bool
+	CanEvolve bool
 }
 
 type BattleReport struct {
@@ -38,7 +39,7 @@ const (
 func CreateNewInBattlePokemon(pokemon *Pokemon) *InBattlePokemon {
 	return &InBattlePokemon{
 		Pokemon:   pokemon,
-		BattleHP:  pokemon.Stats.HP,
+		BattleHP:  pokemon.Stats.HP.Value,
 		IsFainted: false,
 	}
 }

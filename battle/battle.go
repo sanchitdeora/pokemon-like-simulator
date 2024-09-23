@@ -32,7 +32,7 @@ func getPokemonAttackOrder(userActivePokemon *data.InBattlePokemon, trainerActiv
 	}
 
 	// if user's active pokemon speed >= opposing pokemon's, then user goes first.
-	if userActivePokemon.Pokemon.Stats.Speed >= trainerActivePokemon.Pokemon.Stats.Speed {
+	if userActivePokemon.Pokemon.Stats.Speed.Value >= trainerActivePokemon.Pokemon.Stats.Speed.Value {
 		return append(inputs, userInput, trainerInput)
 	} else {
 		return append(inputs, trainerInput, userInput)
@@ -56,23 +56,23 @@ func switchPokemonWithIndex(switchingPokemonIndex int, activePokemon *data.InBat
 func healPokemon(targetPokemon *data.InBattlePokemon, item *data.Item) {
 	targetPokemon.BattleHP += targetPokemon.BattleHP + item.Attributes
 
-	if targetPokemon.BattleHP > targetPokemon.Pokemon.Stats.HP {
-		targetPokemon.BattleHP = targetPokemon.Pokemon.Stats.HP
+	if targetPokemon.BattleHP > targetPokemon.Pokemon.Stats.HP.Value {
+		targetPokemon.BattleHP = targetPokemon.Pokemon.Stats.HP.Value
 	}
 }
 
-func calculateAttackDamage(attackPokemon *data.InBattlePokemon, targetPokemon *data.InBattlePokemon, attackMove *data.Moves, battleTypeAttackCoeff float32) int {
-	var totalDamage float32
+func calculateAttackDamage(attackPokemon *data.InBattlePokemon, targetPokemon *data.InBattlePokemon, attackMove *data.Moves, battleTypeAttackCoeff float64) int {
+	var totalDamage float64
 
-	var attackStat float32 = 0
-	var defenseStat float32 = 0
+	var attackStat float64 = 0
+	var defenseStat float64 = 0
 
 	if attackMove.DamageClass == data.Physical {
-		attackStat = float32(attackPokemon.Pokemon.Stats.Attack)
-		defenseStat = float32(targetPokemon.Pokemon.Stats.Defense)
+		attackStat = float64(attackPokemon.Pokemon.Stats.Attack.Value)
+		defenseStat = float64(targetPokemon.Pokemon.Stats.Defense.Value)
 	} else if attackMove.DamageClass == data.Special {
-		attackStat = float32(attackPokemon.Pokemon.Stats.SpecialAttack)
-		defenseStat = float32(targetPokemon.Pokemon.Stats.SpecialDefense)
+		attackStat = float64(attackPokemon.Pokemon.Stats.SpecialAttack.Value)
+		defenseStat = float64(targetPokemon.Pokemon.Stats.SpecialDefense.Value)
 	} else {
 		slog.Warn("Move Damage class not supported", "move damage class", attackMove.DamageClass)
 	}
@@ -86,7 +86,7 @@ func calculateAttackDamage(attackPokemon *data.InBattlePokemon, targetPokemon *d
 
 	slog.Debug(fmt.Sprintf("Calculating damage: ( ( (((2 * {%v})/5) + 2) * {%v} * ({%v} / {%v}) ) / 50 ) + 2", attackPokemon.Pokemon.Level, attackMove.Power, attackStat, defenseStat))
 
-	totalDamage = (((((2.0 * float32(attackPokemon.Pokemon.Level)) / 5.0) + 2.0) * float32(attackMove.Power) * (attackStat / defenseStat)) / 50) + 2
+	totalDamage = (((((2.0 * float64(attackPokemon.Pokemon.Level)) / 5.0) + 2.0) * float64(attackMove.Power) * (attackStat / defenseStat)) / 50) + 2
 
 	// for battles with more than 1 enemy, coefficient = 0.75
 	slog.Debug(fmt.Sprintf("Battle Attack Coeff: {%f} * {%f}", totalDamage, battleTypeAttackCoeff))
@@ -117,18 +117,6 @@ func calculateAttackDamage(attackPokemon *data.InBattlePokemon, targetPokemon *d
 		}
 	}
 
-	slog.Debug(fmt.Sprintf("Move Effect Coeff: {%f} * {%f} == {%f}", totalDamage, moveEffect, (totalDamage * float32(moveEffect))))
-	return int(math.Round(float64(totalDamage * float32(moveEffect))))
-}
-
-func battleExperienceGain(faintedPokemon *data.Pokemon, pokemonFaced []*data.InBattlePokemon) {
-	for _, inBattlePokemon := range pokemonFaced {
-		if !inBattlePokemon.IsFainted {
-			expGain := calculateExperienceGained(faintedPokemon.Level, faintedPokemon.BasePokemon.BaseExperience, inBattlePokemon.Pokemon.Level)
-			slog.Info(fmt.Sprintf("%s gained %v experience points", inBattlePokemon.Pokemon.Name, expGain))
-		}
-
-		// TODO: create logic
-		// updatePokemonExperience(expGain, pokemon)
-	}
+	slog.Debug(fmt.Sprintf("Move Effect Coeff: {%f} * {%f} == {%f}", totalDamage, moveEffect, (totalDamage * float64(moveEffect))))
+	return int(math.Round(totalDamage * float64(moveEffect)))
 }

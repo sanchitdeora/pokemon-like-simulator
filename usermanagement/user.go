@@ -9,7 +9,7 @@ import (
 )
 
 type User interface {
-	GetUser() (*data.User, error)
+	LoadUser() (*data.User, error)
 	PostBattleUpdate(user *data.User, report *data.BattleReport) error
 	PostWildUpdate(user *data.User, win bool, caught *data.Pokemon) error
 	SaveUser(user *data.User) error
@@ -27,7 +27,7 @@ func NewUserService(opts UserOpts) User {
 	return &UserImpl{opts: opts}
 }
 
-func (u *UserImpl) GetUser() (*data.User, error) {
+func (u *UserImpl) LoadUser() (*data.User, error) {
 	var savedUser data.UserSave
 	var err error
 

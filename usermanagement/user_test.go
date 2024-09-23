@@ -17,12 +17,12 @@ func createUserService(savedPath string) usermanagement.User {
 	return usermanagement.NewUserService(usermanagement.UserOpts{SavedUserPath: savedPath})
 }
 
-// GetUser
+// LoadUser
 
-func TestGetUser(t *testing.T) {
+func TestLoadUser(t *testing.T) {
 	userService := createUserService(TestUserPath)
 
-	user, err := userService.GetUser()
+	user, err := userService.LoadUser()
 	assert.NoError(t, err)
 	
 	assert.Equal(t, "John Cena", user.Name)
@@ -33,8 +33,8 @@ func TestGetUser(t *testing.T) {
 func TestPostBattleUpdate(t *testing.T) {
 	userService := createUserService(TestUserPath)
 
-	user, _ := userService.GetUser()
-	copyOfUser, _ := userService.GetUser()
+	user, _ := userService.LoadUser()
+	copyOfUser, _ := userService.LoadUser()
 
 	report := &data.BattleReport{
 		UserWin: true,
@@ -65,7 +65,7 @@ func TestPostBattleUpdate(t *testing.T) {
 func TestPostWildUpdate(t *testing.T) {
 	userService := createUserService(TestUserPath)
 
-	user, _ := userService.GetUser()
+	user, _ := userService.LoadUser()
 
 	err := userService.PostWildUpdate(user, true, &data.Pokemon{})
 	assert.NoError(t, err)

@@ -6,11 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/sanchitdeora/PokeSim/data"
+	"github.com/sanchitdeora/PokeSim/pokemon"
 	"github.com/sanchitdeora/PokeSim/usermanagement"
 )
 
 type TrainerBattleOpts struct {
 	UserService usermanagement.User
+	PokemonService pokemon.Service
 }
 
 type TrainerBattle struct {
@@ -30,6 +32,8 @@ type TrainerBattle struct {
 
 type TrainerBattleImpl struct {
 	*TrainerBattleOpts
+	UserService usermanagement.User
+	PokemonService pokemon.Service
 	*TrainerBattle
 }
 
@@ -57,7 +61,7 @@ func NewTrainerBattle(opts *TrainerBattleOpts, trainer *data.Trainer) BattleIFac
 	}
 
 	// Get User
-	user, err := opts.UserService.GetUser()
+	user, err := opts.UserService.LoadUser()
 	if err != nil {
 		slog.Warn("did not get user", "user", user, "error", err)
 		user = &data.User{}
@@ -124,6 +128,13 @@ func (tb *TrainerBattleImpl) InitiateBattleSequence() (*data.BattleReport, error
 	// Update User and save after battle completed
 	tb.UserService.PostBattleUpdate(tb.User, report)
 
+	// Pokemon Evolutions
+	for _, inBattlePokemon := range tb.UserInBattleParty {
+		if inBattlePokemon.CanEvolve {
+			tb.PokemonService.Evolve(inBattlePokemon.Pokemon)
+		}
+	}
+
 	return report, err 
 }
 
@@ -163,7 +174,7 @@ func (tb *TrainerBattleImpl) Turn(userInput *data.BattleInput) {
 			slog.Info(fmt.Sprintf("%s has fainted!", tb.getActivePokemonName(false)))
 			tb.TrainerUnfaintedPartyCount -= 1
 
-			battleExperienceGain(tb.TrainerActivePokemon.Pokemon, tb.TrainerPokemonFacedExp[tb.TrainerActivePokemon.Pokemon])
+			tb.BattleExperienceGain(tb.TrainerActivePokemon.Pokemon, tb.TrainerPokemonFacedExp[tb.TrainerActivePokemon.Pokemon])
 
 			if tb.TrainerUnfaintedPartyCount > 0 {
 				// switch active pokemon with first in party and push fainted pokemon at end
@@ -198,7 +209,6 @@ func (tb *TrainerBattleImpl) Attack(attackPokemon *data.InBattlePokemon, targetP
 	}
 
 	slog.Info(fmt.Sprintf("%s did %v points of damage to %s", tb.getActivePokemonName(isUser), damagePoints, tb.getActivePokemonName(!isUser)))
-	fmt.Println()
 }
 
 func (tb *TrainerBattleImpl) SwitchPokemon(switchingPokemon *data.Pokemon, isUser bool) {
@@ -285,6 +295,17 @@ func (tb *TrainerBattleImpl) BattleReport() (*data.BattleReport, error) {
 	}
 
 	return &report, nil
+}
+
+func (tb *TrainerBattleImpl) BattleExperienceGain(faintedPokemon *data.Pokemon, pokemonFaced []*data.InBattlePokemon) {
+	for _, inBattlePokemon := range pokemonFaced {
+		if !inBattlePokemon.IsFainted {
+			expGain := calculateExperienceGained(faintedPokemon.Level, faintedPokemon.BasePokemon.BaseExperience, inBattlePokemon.Pokemon.Level)
+			slog.Info(fmt.Sprintf("%s gained %v experience points", inBattlePokemon.Pokemon.Name, expGain))
+			
+			inBattlePokemon.CanEvolve = tb.PokemonService.ExperienceGain(expGain, inBattlePokemon.Pokemon)
+		}
+	}
 }
 
 func (tb *TrainerBattleImpl) AddToTrainerPokemonFacedExp(pokemon *data.InBattlePokemon) {
